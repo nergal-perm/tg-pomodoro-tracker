@@ -23,6 +23,11 @@
 hs_err_pid*
 replay_pid*
 
-# Maven
-
+# Maven & IntelliJ
+.idea/
 target/
+
+# AWS stuff
+.aws-sam/
+template.yaml
+samconfig.toml
