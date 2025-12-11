@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Pomodoro Telegram Bot - Walking Skeleton
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: java21
+    MemorySize: 512
+    Architectures:
+      - x86_64
+
+Parameters:
+  AdminChatId:
+    Type: String
+    Description: Telegram Chat ID of the authorized user
+  TelegramBotToken:
+    Type: String
+    Description: Telegram Bot API token
+    NoEcho: true
+  GoogleCredentialsJson:
+    Type: String
+    Description: Google Service Account JSON credentials
+    NoEcho: true
+  GoogleDriveFolderId:
+    Type: String
+    Description: Google Drive folder ID for saving notes
+
+Resources:
+  BotFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: ewc.exocortex.pomodoro.BotHandler::handleRequest
+      CodeUri: .
+      Description: Telegram bot handler for Pomodoro tracking
+      SnapStart:
+        ApplyOn: PublishedVersions
+      AutoPublishAlias: live
+      Environment:
+        Variables:
+          ADMIN_CHAT_ID: !Ref AdminChatId
+          TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
+          GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
+          GOOGLE_DRIVE_FOLDER_ID: !Ref GoogleDriveFolderId
+      Events:
+        TelegramWebhook:
+          Type: HttpApi
+          Properties:
+            Path: /webhook
+            Method: POST
+
+Outputs:
+  WebhookUrl:
+    Description: URL for Telegram Webhook
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/webhook"
