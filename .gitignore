@@ -29,5 +29,4 @@ target/
 
 # AWS stuff
 .aws-sam/
-template.yaml
 samconfig.toml

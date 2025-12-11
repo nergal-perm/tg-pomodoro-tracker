@@ -18,9 +18,18 @@ Parameters:
     Type: String
     Description: Telegram Bot API token
     NoEcho: true
-  GoogleCredentialsJson:
+  GoogleClientId:
     Type: String
-    Description: Google Service Account JSON credentials
+    Description: Google OAuth2 Client ID
+    # NoEcho: false - Client ID is generally not considered secret, but safe to keep
+
+  GoogleClientSecret:
+    Type: String
+    Description: Google OAuth2 Client Secret
+    NoEcho: true
+  GoogleRefreshToken:
+    Type: String
+    Description: Google OAuth2 Refresh Token (offline access)
     NoEcho: true
   GoogleDriveFolderId:
     Type: String
@@ -40,7 +49,9 @@ Resources:
         Variables:
           ADMIN_CHAT_ID: !Ref AdminChatId
           TELEGRAM_BOT_TOKEN: !Ref TelegramBotToken
-          GOOGLE_CREDENTIALS_JSON: !Ref GoogleCredentialsJson
+          GOOGLE_CLIENT_ID: !Ref GoogleClientId
+          GOOGLE_CLIENT_SECRET: !Ref GoogleClientSecret
+          GOOGLE_REFRESH_TOKEN: !Ref GoogleRefreshToken
           GOOGLE_DRIVE_FOLDER_ID: !Ref GoogleDriveFolderId
       Events:
         TelegramWebhook:

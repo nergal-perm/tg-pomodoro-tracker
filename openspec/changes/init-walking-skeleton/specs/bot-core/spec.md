@@ -23,5 +23,5 @@ The bot MUST save user messages as Markdown files in the configured Google Drive
 
 #### Scenario: Save User Response
 - **WHEN** the authorized user sends a text message (not a command)
-- **THEN** the bot uploads a new `.md` file to Google Drive containing the message text.
+- **THEN** the bot uploads a new `.md` file to Google Drive using the provided **OAuth2 User Credentials**.
 - **AND** the bot replies "Saved to Drive!"
