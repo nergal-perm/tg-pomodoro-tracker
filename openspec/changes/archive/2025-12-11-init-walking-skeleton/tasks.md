@@ -6,7 +6,7 @@
 ## 2. Core Implementation
 - [x] 2.1 Implement `SecurityService`: Verify incoming `chatId` against environment variable/hardcoded ID.
 - [x] 2.2 Implement `DriveService`: Authenticate with Google Service Account and provide `uploadNote(String content)` method.
-- [ ] 2.2b Refactor `DriveService`: Switch to OAuth2 with Refresh Token (`UserCredentials`).
+- [x] 2.2b Refactor `DriveService`: Switch to OAuth2 with Refresh Token (`UserCredentials`).
 - [x] 2.3 Implement `TelegramService`: Parse `Update` JSON, handle `/start` command, and send `sendMessage` reply.
 - [x] 2.4 Implement `BotHandler`: Main Lambda entry point routing Webhook events.
 
@@ -16,5 +16,5 @@
 
 ## 4. Deployment Config
 - [x] 4.1 Create `template.yaml` (AWS SAM) with SnapStart enabled.
-- [ ] 4.2 Update `template.yaml` to use OAuth2 parameters (`ClientId`, `ClientSecret`, `RefreshToken`).
-- [ ] 4.3 Update `DEPLOYMENT.md` with OAuth2 setup guide.
+- [x] 4.2 Update `template.yaml` to use OAuth2 parameters (`ClientId`, `ClientSecret`, `RefreshToken`).
+- [x] 4.3 Update `DEPLOYMENT.md` with OAuth2 setup guide.
