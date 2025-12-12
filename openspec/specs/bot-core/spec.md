@@ -1,7 +1,7 @@
 # bot-core Specification
 
 ## Purpose
-TBD - created by archiving change init-walking-skeleton. Update Purpose after archive.
+Provides the foundational Telegram bot infrastructure including single-user authorization, basic command handling, and Google Drive integration for saving notes.
 ## Requirements
 ### Requirement: Single User Authorization
 The bot MUST restrict access to a single authorized user identified by their Telegram Chat ID.

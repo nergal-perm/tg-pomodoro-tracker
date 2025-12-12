@@ -393,7 +393,8 @@ Only add complexity with:
 - Link related changes and PRs
 
 ### Capability Naming
-- Use verb-noun: `user-auth`, `payment-capture`
+- **Use kebab-case for all spec directory names**: `work-session-management`, `user-auth`, `payment-capture`
+- Use verb-noun patterns: `user-auth`, `payment-capture`
 - Single purpose per capability
 - 10-minute understandability rule
 - Split if description needs "AND"
@@ -405,11 +406,11 @@ Only add complexity with:
 
 ## Tool Selection Guide
 
-| Task | Tool | Why |
-|------|------|-----|
-| Find files by pattern | Glob | Fast pattern matching |
-| Search code content | Grep | Optimized regex search |
-| Read specific files | Read | Direct file access |
+| Task                  | Tool | Why                      |
+| --------------------- | ---- | ------------------------ |
+| Find files by pattern | Glob | Fast pattern matching    |
+| Search code content   | Grep | Optimized regex search   |
+| Read specific files   | Read | Direct file access       |
 | Explore unknown scope | Task | Multi-step investigation |
 
 ## Error Recovery
