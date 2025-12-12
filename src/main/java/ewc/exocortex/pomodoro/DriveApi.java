@@ -10,9 +10,10 @@ public interface DriveApi {
     /**
      * Uploads a Markdown note to Google Drive.
      *
-     * @param content the Markdown content to save
+     * @param fileName the name for the file
+     * @param content  the Markdown content to save
      * @return the file ID of the created file
      * @throws IOException if the upload fails
      */
-    String uploadNote(String content) throws IOException;
+    String uploadNote(String fileName, String content) throws IOException;
 }

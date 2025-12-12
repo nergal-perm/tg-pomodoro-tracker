@@ -100,5 +100,44 @@ After deployment succeeds, SAM will output a **Outputs** section containing the 
 
 3.  **Test**:
     *   Open your bot in Telegram.
-    *   Send "Test message".
-    *   Check your Google Drive folder for the new file (it should be owned by you).
+    *   Send `/start` to begin a new work session.
+    *   Select a duration and provide a title.
+    *   Send `/stop` to end the session and provide a result.
+    *   Check your Google Drive folder for the new file.
+
+---
+
+## AWS Infrastructure (Automatic via SAM)
+
+The following resources are **automatically created** by `sam deploy`:
+
+### DynamoDB Table: `PomodoroBotState`
+- **Purpose**: Stores session state across Lambda invocations
+- **Partition Key**: `chatId` (Number)
+- **Billing**: Pay-per-request (no provisioned capacity)
+- **Attributes stored**: `status`, `sessionTitle`, `duration`, `startTime`, `scheduleName`
+
+### Lambda Permissions
+The Lambda function is automatically granted:
+- `dynamodb:PutItem`, `GetItem`, `DeleteItem` on the `PomodoroBotState` table
+
+---
+
+## EventBridge Scheduler (Automatic via SAM)
+
+The timer functionality uses **AWS EventBridge Scheduler** to trigger the Lambda after the work session duration expires.
+
+### Resources Created
+- **SchedulerExecutionRole**: IAM role allowing EventBridge to invoke the Lambda
+- **Lambda Policies**: Permissions for `scheduler:CreateSchedule`, `scheduler:DeleteSchedule`, and `iam:PassRole`
+
+### Environment Variables
+The Lambda receives these for timer management:
+- `LAMBDA_ARN`: Target ARN for EventBridge schedules
+- `SCHEDULER_ROLE_ARN`: Role ARN for EventBridge to assume
+
+### How It Works
+1. User provides session title → Lambda calls `scheduler:CreateSchedule` with `at()` expression
+2. Timer fires → EventBridge invokes Lambda with `{"action":"TIMER_DONE","chatId":123}`
+3. Lambda prompts user for result
+4. If user sends `/stop` → Lambda calls `scheduler:DeleteSchedule` to cancel timer

@@ -12,8 +12,6 @@ import com.google.auth.oauth2.UserCredentials;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 
 /**
@@ -23,7 +21,6 @@ public final class DriveService implements DriveApi {
 
     private static final String APPLICATION_NAME = "Pomodoro Bot";
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
-    private static final DateTimeFormatter FILENAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss");
 
     private final Drive drive;
     private final String folderId;
@@ -76,9 +73,7 @@ public final class DriveService implements DriveApi {
     }
 
     @Override
-    public String uploadNote(final String content) throws IOException {
-        final String fileName = "note_" + LocalDateTime.now().format(FILENAME_FORMAT) + ".md";
-
+    public String uploadNote(final String fileName, final String content) throws IOException {
         final File fileMetadata = new File();
         fileMetadata.setName(fileName);
         fileMetadata.setMimeType("text/markdown");

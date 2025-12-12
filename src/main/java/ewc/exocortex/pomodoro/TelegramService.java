@@ -8,6 +8,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Handles Telegram API interactions: parsing updates and sending messages.
@@ -40,15 +42,26 @@ public final class TelegramService implements TelegramApi {
     @Override
     public Update parseUpdate(final String json) throws IOException {
         final JsonNode root = objectMapper.readTree(json);
+
+        // Check for callback query first
+        final JsonNode callbackQuery = root.get("callback_query");
+        if (callbackQuery != null) {
+            final long chatId = callbackQuery.get("message").get("chat").get("id").asLong();
+            final String callbackQueryId = callbackQuery.get("id").asText();
+            final String callbackData = callbackQuery.get("data").asText();
+            return new Update(chatId, null, callbackQueryId, callbackData);
+        }
+
+        // Check for regular message
         final JsonNode message = root.get("message");
         if (message == null) {
-            return null; // Not a message update (could be callback, edited message, etc.)
+            return null; // Not a message update
         }
 
         final long chatId = message.get("chat").get("id").asLong();
         final String text = message.has("text") ? message.get("text").asText() : "";
 
-        return new Update(chatId, text);
+        return new Update(chatId, text, null, null);
     }
 
     @Override
@@ -56,8 +69,40 @@ public final class TelegramService implements TelegramApi {
         final String url = TELEGRAM_API_BASE + botToken + "/sendMessage";
 
         final String payload = objectMapper.writeValueAsString(
-                new SendMessagePayload(chatId, text));
+                Map.of("chat_id", chatId, "text", text));
 
+        sendApiRequest(url, payload);
+    }
+
+    @Override
+    public void sendMessageWithKeyboard(final long chatId, final String text, final List<Button> buttons)
+            throws IOException, InterruptedException {
+        final String url = TELEGRAM_API_BASE + botToken + "/sendMessage";
+
+        // Build inline keyboard - one button per row for simplicity
+        final List<List<Map<String, String>>> keyboard = buttons.stream()
+                .map(b -> List.of(Map.of("text", b.text(), "callback_data", b.callbackData())))
+                .toList();
+
+        final Map<String, Object> payload = Map.of(
+                "chat_id", chatId,
+                "text", text,
+                "reply_markup", Map.of("inline_keyboard", keyboard));
+
+        sendApiRequest(url, objectMapper.writeValueAsString(payload));
+    }
+
+    @Override
+    public void answerCallbackQuery(final String callbackQueryId) throws IOException, InterruptedException {
+        final String url = TELEGRAM_API_BASE + botToken + "/answerCallbackQuery";
+
+        final String payload = objectMapper.writeValueAsString(
+                Map.of("callback_query_id", callbackQueryId));
+
+        sendApiRequest(url, payload);
+    }
+
+    private void sendApiRequest(final String url, final String payload) throws IOException, InterruptedException {
         final HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
@@ -68,11 +113,5 @@ public final class TelegramService implements TelegramApi {
         if (response.statusCode() != 200) {
             throw new IOException("Telegram API error: " + response.statusCode() + " - " + response.body());
         }
-    }
-
-    /**
-     * Payload for the sendMessage API call.
-     */
-    private record SendMessagePayload(long chat_id, String text) {
     }
 }

@@ -40,6 +40,20 @@
       <version>${aws.lambda.java.events.version}</version>
     </dependency>
 
+    <!-- AWS DynamoDB -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>dynamodb</artifactId>
+      <version>2.29.45</version>
+    </dependency>
+
+    <!-- AWS EventBridge Scheduler -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>scheduler</artifactId>
+      <version>2.29.45</version>
+    </dependency>
+
     <!-- Google Drive API -->
     <dependency>
       <groupId>com.google.api-client</groupId>
