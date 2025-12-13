@@ -19,11 +19,36 @@ import java.util.Map;
 public class BotHandler implements RequestHandler<Map<String, Object>, Map<String, Object>> {
 
     private static final List<TelegramApi.Button> DURATION_BUTTONS = List.of(
-            new TelegramApi.Button("5 min", "duration:5"),
-            new TelegramApi.Button("30 min", "duration:30"),
-            new TelegramApi.Button("45 min", "duration:45"),
-            new TelegramApi.Button("60 min", "duration:60"),
-            new TelegramApi.Button("90 min", "duration:90"));
+            new TelegramApi.Button("5 минут", "duration:5"),
+            new TelegramApi.Button("30 минут", "duration:30"),
+            new TelegramApi.Button("45 минут", "duration:45"),
+            new TelegramApi.Button("60 минут", "duration:60"),
+            new TelegramApi.Button("90 минут", "duration:90"));
+
+    private static final List<TelegramApi.Button> ROLE_BUTTONS = List.of(
+            new TelegramApi.Button("Ученик", "role:ученик"),
+            new TelegramApi.Button("Интеллектуал", "role:интеллектуал"),
+            new TelegramApi.Button("Профессионал", "role:профессионал"),
+            new TelegramApi.Button("Исследователь", "role:исследователь"),
+            new TelegramApi.Button("Просветитель", "role:просветитель"));
+
+    private static final List<TelegramApi.Button> ENERGY_BUTTONS = List.of(
+            new TelegramApi.Button("5-Пиковый", "energy:5"),
+            new TelegramApi.Button("4-Потоковый", "energy:4"),
+            new TelegramApi.Button("3-Функциональный", "energy:3"),
+            new TelegramApi.Button("2-Упадок", "energy:2"),
+            new TelegramApi.Button("1-Истощение", "energy:1"),
+            new TelegramApi.Button("0-Критический", "energy:0"));
+
+    private static final List<TelegramApi.Button> FOCUS_BUTTONS = List.of(
+            new TelegramApi.Button("3-Предельный", "focus:3"),
+            new TelegramApi.Button("2-Обычный", "focus:2"),
+            new TelegramApi.Button("1-Рассеянный", "focus:1"));
+
+    private static final List<TelegramApi.Button> QUALITY_BUTTONS = List.of(
+            new TelegramApi.Button("3-Исключительное", "quality:3"),
+            new TelegramApi.Button("2-Приемлемое", "quality:2"),
+            new TelegramApi.Button("1-Низкое", "quality:1"));
 
     private final SecurityService securityService;
     private final TelegramApi telegramApi;
@@ -99,6 +124,7 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
         } catch (Exception e) {
             context.getLogger().log("Error processing request: " + e.getMessage());
+            e.printStackTrace();
             return successResponse();
         }
     }
@@ -119,9 +145,9 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             return;
         }
 
-        // Transition to WAITING_FOR_RESULT
-        sessionRepository.saveSession(session.waitingForResult());
-        telegramApi.sendMessage(chatId, "⏰ Time's up! Tell me what you have done.");
+        // Transition to WAITING_FOR_ENERGY containing ritual data
+        sessionRepository.saveSession(session.waitingForEnergy());
+        telegramApi.sendMessageWithKeyboard(chatId, "Время вышло. Каков был уровень энергии?", ENERGY_BUTTONS);
     }
 
     private void routeUpdate(final TelegramApi.Update update, final SessionData session, final Context context)
@@ -139,7 +165,7 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             return;
         }
 
-        // Handle callback queries (duration selection)
+        // Handle callback queries
         if (update.isCallbackQuery()) {
             telegramApi.answerCallbackQuery(update.callbackQueryId());
             handleCallbackQuery(update.chatId(), update.callbackData(), session, context);
@@ -164,38 +190,60 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
         telegramApi.sendMessageWithKeyboard(
                 chatId,
-                "How long do you want to work?",
+                "Выберите продолжительность сессии (минуты):",
                 DURATION_BUTTONS);
     }
 
     private void handleStopCommand(final long chatId, final SessionData session, final Context context)
             throws IOException, InterruptedException {
         if (session.status() != SessionState.WORKING) {
-            telegramApi.sendMessage(chatId, "No active session to stop.");
+            telegramApi.sendMessage(chatId, "Нет активной сессии для остановки.");
             return;
         }
 
         // Cancel the EventBridge schedule
         timerService.cancelTimer(session.scheduleName());
 
-        sessionRepository.saveSession(session.waitingForResult());
-        telegramApi.sendMessage(chatId, "Session stopped. Tell me what you have done.");
+        sessionRepository.saveSession(session.waitingForEnergy());
+        telegramApi.sendMessageWithKeyboard(chatId, "Сессия остановлена. Каков был уровень энергии?", ENERGY_BUTTONS);
     }
 
     private void handleCallbackQuery(final long chatId, final String callbackData,
             final SessionData session, final Context context)
             throws IOException, InterruptedException {
 
-        if (session.status() != SessionState.WAITING_FOR_DURATION) {
+        if (callbackData.startsWith("duration:") && session.status() == SessionState.WAITING_FOR_DURATION) {
+            final int duration = Integer.parseInt(callbackData.substring("duration:".length()));
+            sessionRepository.saveSession(session.waitingForTask(duration));
+            telegramApi.sendMessage(chatId, "Что ты собираешься делать? (Один глагол, описание метода)");
             return;
         }
 
-        if (callbackData.startsWith("duration:")) {
-            final int duration = Integer.parseInt(callbackData.substring("duration:".length()));
+        if (callbackData.startsWith("role:") && session.status() == SessionState.WAITING_FOR_ROLE) {
+            final String role = callbackData.substring("role:".length());
+            handleRoleInput(chatId, role, session);
+            return;
+        }
 
-            sessionRepository.saveSession(session.waitingForTitle(duration));
-            telegramApi.sendMessage(chatId,
-                    String.format("Duration set to %d minutes. What are you working on?", duration));
+        if (callbackData.startsWith("energy:") && session.status() == SessionState.WAITING_FOR_ENERGY) {
+            final String energy = callbackData.substring("energy:".length());
+            sessionRepository.saveSession(session.waitingForFocus(energy));
+            telegramApi.sendMessageWithKeyboard(chatId, "Каков был уровень фокуса?", FOCUS_BUTTONS);
+            return;
+        }
+
+        if (callbackData.startsWith("focus:") && session.status() == SessionState.WAITING_FOR_FOCUS) {
+            final String focus = callbackData.substring("focus:".length());
+            sessionRepository.saveSession(session.waitingForQuality(focus));
+            telegramApi.sendMessageWithKeyboard(chatId, "Каково качество рабочего продукта?", QUALITY_BUTTONS);
+            return;
+        }
+
+        if (callbackData.startsWith("quality:") && session.status() == SessionState.WAITING_FOR_QUALITY) {
+            final String quality = callbackData.substring("quality:".length());
+            sessionRepository.saveSession(session.waitingForSummary(quality));
+            telegramApi.sendMessage(chatId, "Подведите краткий итог сессии.");
+            return;
         }
     }
 
@@ -204,66 +252,105 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             throws IOException, InterruptedException {
 
         switch (session.status()) {
-            case WAITING_FOR_TITLE -> handleTitleInput(chatId, text, session);
-            case WAITING_FOR_RESULT -> handleResultInput(chatId, text, session);
+            case WAITING_FOR_TASK -> {
+                sessionRepository.saveSession(session.waitingForRole(text));
+                telegramApi.sendMessageWithKeyboard(chatId, "В какой роли ты это будешь делать?", ROLE_BUTTONS);
+            }
+            case WAITING_FOR_ROLE -> handleRoleInput(chatId, text, session); // Handle manual text input for Role
+            case WAITING_FOR_PRODUCT_TYPE -> {
+                sessionRepository.saveSession(session.waitingForUsageContext(text));
+                telegramApi.sendMessage(chatId, "Где и при каких условиях этот рабочий продукт будет применен?");
+            }
+            case WAITING_FOR_USAGE_CONTEXT -> {
+                sessionRepository.saveSession(session.waitingForContext(text));
+                telegramApi.sendMessage(chatId, "Каков контекст рабочей сессии? (Ситуация, причина, триггер)");
+            }
+            case WAITING_FOR_CONTEXT -> {
+                sessionRepository.saveSession(session.waitingForResources(text));
+                telegramApi.sendMessage(chatId, "Каковы ресурсы на входе?");
+            }
+            case WAITING_FOR_RESOURCES -> {
+                sessionRepository.saveSession(session.waitingForConstraints(text));
+                telegramApi.sendMessage(chatId, "Ограничения, если есть?");
+            }
+            case WAITING_FOR_CONSTRAINTS -> startWorkingSession(chatId, text, session);
+
+            // Reflection Text Inputs
+            case WAITING_FOR_SUMMARY -> {
+                sessionRepository.saveSession(session.waitingForNextStep(text));
+                telegramApi.sendMessage(chatId, "Каков следующий шаг?");
+            }
+            case WAITING_FOR_NEXT_STEP -> finishSession(chatId, text, session);
+
+            case IDLE -> {
+                // In IDLE, just save the message to Drive as a simple note (legacy behavior /
+                // bot-core spec)
+                final String fileName = formatFileName(Instant.now(), "Quick Note");
+                driveApi.uploadNote(fileName, text);
+                telegramApi.sendMessage(chatId, "Информация о рабочей сессии сохранена на Диск!");
+            }
             default -> {
-                // In IDLE or other states, ignore plain text
+                // Ignore
             }
         }
     }
 
-    private void handleTitleInput(final long chatId, final String title, final SessionData session)
+    private void handleRoleInput(final long chatId, final String role, final SessionData session)
             throws IOException, InterruptedException {
-
-        final Instant startTime = Instant.now();
-
-        // Create EventBridge schedule
-        final String scheduleName = timerService.createTimer(chatId, session.duration());
-
-        // Transition to WORKING
-        sessionRepository.saveSession(session.working(title, startTime, scheduleName));
-
-        telegramApi.sendMessage(chatId,
-                String.format("⏱️ Timer started for '%s' (%d minutes). Focus!", title, session.duration()));
+        sessionRepository.saveSession(session.waitingForProductType(role));
+        telegramApi.sendMessage(chatId, "Какой рабочий продукт рассчитываешь получить? (Заготовка, код и т.п.)");
     }
 
-    private void handleResultInput(final long chatId, final String result, final SessionData session)
+    private void startWorkingSession(final long chatId, final String constraints, final SessionData session)
+            throws IOException, InterruptedException {
+        final Instant startTime = Instant.now();
+        final String scheduleName = timerService.createTimer(chatId, session.duration());
+
+        sessionRepository.saveSession(session.working(constraints, startTime, scheduleName));
+        telegramApi.sendMessage(chatId, String.format("Таймер запущен на %d минут. Работаем.", session.duration()));
+    }
+
+    private void finishSession(final long chatId, final String nextStep, final SessionData session)
             throws IOException, InterruptedException {
 
-        final Instant stopTime = Instant.now();
+        SessionData completedSession = new SessionData(
+                session.chatId(),
+                SessionState.IDLE, // Final state
+                session.duration(),
+                session.scheduleName(),
+                session.task(),
+                session.role(),
+                session.productType(),
+                session.usageContext(),
+                session.workContext(),
+                session.resources(),
+                session.constraints(),
+                session.startTime(),
+                session.energyLevel(),
+                session.focusLevel(),
+                session.qualityLevel(),
+                session.summary(),
+                nextStep // The final piece
+        );
 
-        // Format and upload note
-        final String noteContent = formatNote(session, stopTime, result);
-        final String fileName = formatFileName(session.startTime(), session.sessionTitle());
+        final Instant stopTime = Instant.now();
+        final String noteContent = NoteFormatter.format(completedSession, stopTime);
+        final String fileName = formatFileName(completedSession.startTime(), completedSession.task());
 
         driveApi.uploadNote(fileName, noteContent);
 
-        // Clear session state
         sessionRepository.deleteSession(chatId);
-
-        telegramApi.sendMessage(chatId, "✅ Session saved to Drive!");
-    }
-
-    private String formatNote(final SessionData session, final Instant stopTime, final String result) {
-        return String.format("""
-                ---
-                started: %s
-                stopped: %s
-                timer_setting: %d
-                ---
-
-                %s
-                """,
-                session.startTime().toString(),
-                stopTime.toString(),
-                session.duration(),
-                result);
+        telegramApi.sendMessage(chatId, "Сессия сохранена. Отдыхаем.");
     }
 
     private String formatFileName(final Instant startTime, final String title) {
-        final String date = LocalDate.ofInstant(startTime, ZoneOffset.UTC)
-                .format(DateTimeFormatter.ISO_LOCAL_DATE);
-        return date + " " + title + ".md";
+        final String safeTitle = title.replaceAll("[^a-zA-Z0-9а-яА-Я ]", "").trim();
+        final String shortTitle = safeTitle.length() > 30 ? safeTitle.substring(0, 30) : safeTitle;
+
+        final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd' 'HH-mm")
+                .withZone(java.time.ZoneId.of("Asia/Tbilisi"));
+        final String dateTime = formatter.format(startTime);
+        return dateTime + " - " + shortTitle + ".md";
     }
 
     private Map<String, Object> successResponse() {

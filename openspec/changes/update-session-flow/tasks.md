@@ -1,22 +1,22 @@
 ## 1. Implementation
-- [ ] 1.1 Update `bot-core` messages to Russian
-- [ ] 1.2 Implement Duration Selection (existing, just verify flow)
-- [ ] 1.3 Implement Pre-work Ritual State Machine
-    - [ ] 1.3.1 Question 1: Что ты собираешься делать? (Task)
-    - [ ] 1.3.2 Question 2: В какой роли? (Role - with buttons)
-    - [ ] 1.3.3 Question 3: Какой рабочий продукт? (Product Type)
-    - [ ] 1.3.4 Question 4: Где и при каких условиях? (Usage Context)
-    - [ ] 1.3.5 Question 5: Каков контекст? (Work Context)
-    - [ ] 1.3.6 Question 6: Каковы ресурсы? (Resources)
-    - [ ] 1.3.7 Question 7: Ограничения? (Constraints)
-- [ ] 1.4 Implement Post-work Reflection State Machine
-    - [ ] 1.4.1 Question 1: Уровень энергии? (Energy - buttons)
-    - [ ] 1.4.2 Question 2: Уровень фокуса? (Focus - buttons)
-    - [ ] 1.4.3 Question 3: Качество продукта? (Quality - buttons)
-    - [ ] 1.4.4 Question 4: Краткий итог? (Summary)
-    - [ ] 1.4.5 Question 5: Следующий шаг? (Next Step)
-- [ ] 1.5 Formatting & Archiving
-    - [ ] 1.5.1 Create `src/main/resources/templates/session-note.md`
-    - [ ] 1.5.2 Implement `NoteFormatter` logic (load template + replace placeholders)
-    - [ ] 1.5.3 Update `DriveService` (or handler) to use `NoteFormatter`
-- [ ] 1.6 Verify full flow end-to-end
+- [x] 1.1 Update `bot-core` messages to Russian
+- [x] 1.2 Implement Duration Selection (existing, just verify flow)
+- [x] 1.3 Implement Pre-work Ritual State Machine
+    - [x] 1.3.1 Question 1: Что ты собираешься делать? (Task)
+    - [x] 1.3.2 Question 2: В какой роли? (Role - with buttons)
+    - [x] 1.3.3 Question 3: Какой рабочий продукт? (Product Type)
+    - [x] 1.3.4 Question 4: Где и при каких условиях? (Usage Context)
+    - [x] 1.3.5 Question 5: Каков контекст? (Work Context)
+    - [x] 1.3.6 Question 6: Каковы ресурсы? (Resources)
+    - [x] 1.3.7 Question 7: Ограничения? (Constraints)
+- [x] 1.4 Implement Post-work Reflection State Machine
+    - [x] 1.4.1 Question 1: Уровень энергии? (Energy - buttons)
+    - [x] 1.4.2 Question 2: Уровень фокуса? (Focus - buttons)
+    - [x] 1.4.3 Question 3: Качество продукта? (Quality - buttons)
+    - [x] 1.4.4 Question 4: Краткий итог? (Summary)
+    - [x] 1.4.5 Question 5: Следующий шаг? (Next Step)
+- [x] 1.5 Formatting & Archiving
+    - [x] 1.5.1 Create `src/main/resources/templates/session-note.md`
+    - [x] 1.5.2 Implement `NoteFormatter` logic (load template + replace placeholders)
+    - [x] 1.5.3 Update `DriveService` (or handler) to use `NoteFormatter`
+- [x] 1.6 Verify full flow end-to-end

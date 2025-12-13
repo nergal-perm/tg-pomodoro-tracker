@@ -43,10 +43,21 @@ public final class DynamoSessionRepository implements SessionRepository {
         return new SessionData(
                 chatId,
                 SessionState.valueOf(getStringOrNull(item, "status")),
-                getStringOrNull(item, "sessionTitle"),
                 getIntegerOrNull(item, "duration"),
+                getStringOrNull(item, "scheduleName"),
+                getStringOrNull(item, "task"),
+                getStringOrNull(item, "role"),
+                getStringOrNull(item, "productType"),
+                getStringOrNull(item, "usageContext"),
+                getStringOrNull(item, "workContext"),
+                getStringOrNull(item, "resources"),
+                getStringOrNull(item, "constraints"),
                 getInstantOrNull(item, "startTime"),
-                getStringOrNull(item, "scheduleName"));
+                getStringOrNull(item, "energyLevel"),
+                getStringOrNull(item, "focusLevel"),
+                getStringOrNull(item, "qualityLevel"),
+                getStringOrNull(item, "summary"),
+                getStringOrNull(item, "nextStep"));
     }
 
     @Override
@@ -55,18 +66,24 @@ public final class DynamoSessionRepository implements SessionRepository {
         item.put(PK, AttributeValue.builder().n(String.valueOf(session.chatId())).build());
         item.put("status", AttributeValue.builder().s(session.status().name()).build());
 
-        if (session.sessionTitle() != null) {
-            item.put("sessionTitle", AttributeValue.builder().s(session.sessionTitle()).build());
-        }
-        if (session.duration() != null) {
-            item.put("duration", AttributeValue.builder().n(String.valueOf(session.duration())).build());
-        }
-        if (session.startTime() != null) {
-            item.put("startTime", AttributeValue.builder().s(session.startTime().toString()).build());
-        }
-        if (session.scheduleName() != null) {
-            item.put("scheduleName", AttributeValue.builder().s(session.scheduleName()).build());
-        }
+        putIfNotNull(item, "duration", session.duration() != null ? String.valueOf(session.duration()) : null, true);
+        putIfNotNull(item, "scheduleName", session.scheduleName(), false);
+
+        putIfNotNull(item, "task", session.task(), false);
+        putIfNotNull(item, "role", session.role(), false);
+        putIfNotNull(item, "productType", session.productType(), false);
+        putIfNotNull(item, "usageContext", session.usageContext(), false);
+        putIfNotNull(item, "workContext", session.workContext(), false);
+        putIfNotNull(item, "resources", session.resources(), false);
+        putIfNotNull(item, "constraints", session.constraints(), false);
+
+        putIfNotNull(item, "startTime", session.startTime() != null ? session.startTime().toString() : null, false);
+
+        putIfNotNull(item, "energyLevel", session.energyLevel(), false);
+        putIfNotNull(item, "focusLevel", session.focusLevel(), false);
+        putIfNotNull(item, "qualityLevel", session.qualityLevel(), false);
+        putIfNotNull(item, "summary", session.summary(), false);
+        putIfNotNull(item, "nextStep", session.nextStep(), false);
 
         dynamoDb.putItem(PutItemRequest.builder()
                 .tableName(TABLE_NAME)
@@ -80,6 +97,17 @@ public final class DynamoSessionRepository implements SessionRepository {
                 .tableName(TABLE_NAME)
                 .key(Map.of(PK, AttributeValue.builder().n(String.valueOf(chatId)).build()))
                 .build());
+    }
+
+    private void putIfNotNull(final Map<String, AttributeValue> item, final String key, final String value,
+            final boolean isNumber) {
+        if (value != null) {
+            if (isNumber) {
+                item.put(key, AttributeValue.builder().n(value).build());
+            } else {
+                item.put(key, AttributeValue.builder().s(value).build());
+            }
+        }
     }
 
     private String getStringOrNull(final Map<String, AttributeValue> item, final String key) {

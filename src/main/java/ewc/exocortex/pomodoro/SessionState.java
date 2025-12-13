@@ -8,24 +8,23 @@ public enum SessionState {
      * No active session, waiting for /start command.
      */
     IDLE,
-
-    /**
-     * Waiting for user to select session duration.
-     */
     WAITING_FOR_DURATION,
 
-    /**
-     * Waiting for user to provide session title.
-     */
-    WAITING_FOR_TITLE,
+    // Pre-work Ritual
+    WAITING_FOR_TASK,
+    WAITING_FOR_ROLE,
+    WAITING_FOR_PRODUCT_TYPE,
+    WAITING_FOR_USAGE_CONTEXT,
+    WAITING_FOR_CONTEXT,
+    WAITING_FOR_RESOURCES,
+    WAITING_FOR_CONSTRAINTS,
 
-    /**
-     * Timer is running, user is working.
-     */
     WORKING,
 
-    /**
-     * Session finished, waiting for user to provide result description.
-     */
-    WAITING_FOR_RESULT
+    // Post-work Reflection
+    WAITING_FOR_ENERGY,
+    WAITING_FOR_FOCUS,
+    WAITING_FOR_QUALITY,
+    WAITING_FOR_SUMMARY,
+    WAITING_FOR_NEXT_STEP
 }

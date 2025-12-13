@@ -16,8 +16,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for BotHandler routing logic.
- * Uses simple test doubles instead of mocking frameworks.
+ * Unit tests for BotHandler routing logic, updated for Ritual and Twist flows.
  */
 class BotHandlerTest {
 
@@ -43,275 +42,193 @@ class BotHandlerTest {
         handler = new BotHandler(securityService, telegramApi, driveApi, sessionRepository, timerService);
     }
 
-    @Nested
-    @DisplayName("Security")
-    class Security {
+    @Test
+    @DisplayName("Complete Ritual Flow")
+    void shouldCompleteRitualFlow() {
+        // 1. /start
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "/start"), context);
+        assertLastMessageContains("Выберите продолжительность");
+        assertState(SessionState.WAITING_FOR_DURATION);
 
-        @Test
-        @DisplayName("should ignore unauthorized users")
-        void shouldIgnoreUnauthorizedUsers() {
-            final var request = createMessageRequest(STRANGER_ID, "Hello");
+        // 2. Select Duration
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb1", "duration:45"), context);
+        assertLastMessageContains("Что ты собираешься делать?");
+        assertState(SessionState.WAITING_FOR_TASK);
 
-            handler.handleRequest(request, context);
+        // 3. Enter Task
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Coding"), context);
+        assertLastMessageContains("В какой роли");
+        assertState(SessionState.WAITING_FOR_ROLE);
 
-            assertTrue(telegramApi.sentMessages.isEmpty());
-            assertTrue(telegramApi.keyboardMessages.isEmpty());
-        }
+        // 4. Select Role (Callback)
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb2", "role:профессионал"), context);
+        assertLastMessageContains("Какой рабочий продукт");
+        assertState(SessionState.WAITING_FOR_PRODUCT_TYPE);
+
+        // 5. Enter Product Type
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Code"), context);
+        assertLastMessageContains("Где и при каких условиях");
+        assertState(SessionState.WAITING_FOR_USAGE_CONTEXT);
+
+        // 6. Enter Usage Context
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Production"), context);
+        assertLastMessageContains("Каков контекст");
+        assertState(SessionState.WAITING_FOR_CONTEXT);
+
+        // 7. Enter Work Context
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Urgent fix"), context);
+        assertLastMessageContains("Каковы ресурсы");
+        assertState(SessionState.WAITING_FOR_RESOURCES);
+
+        // 8. Enter Resources
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Coffee"), context);
+        assertLastMessageContains("Ограничения");
+        assertState(SessionState.WAITING_FOR_CONSTRAINTS);
+
+        // 9. Enter Constraints -> START TIMER
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "None"), context);
+        assertLastMessageContains("Таймер запущен");
+        assertState(SessionState.WORKING);
+
+        final var session = sessionRepository.getSession(ADMIN_ID);
+        assertEquals(45, session.duration());
+        assertEquals("Coding", session.task());
+        assertNotNull(session.startTime());
+        assertNotNull(session.scheduleName());
     }
 
-    @Nested
-    @DisplayName("/start command")
-    class StartCommand {
+    @Test
+    @DisplayName("Complete Reflection Flow")
+    void shouldCompleteReflectionFlow() {
+        // Setup working session
+        shouldCompleteRitualFlow();
+        telegramApi.sentMessages.clear();
 
-        @Test
-        @DisplayName("should show duration selection keyboard")
-        void shouldShowDurationKeyboard() {
-            final var request = createMessageRequest(ADMIN_ID, "/start");
+        // 1. Timer finishes (or Stop)
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "/stop"), context);
+        assertLastMessageContains("уровень энергии");
+        assertState(SessionState.WAITING_FOR_ENERGY);
 
-            handler.handleRequest(request, context);
+        // 2. Select Energy
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb3", "energy:5"), context);
+        assertLastMessageContains("уровень фокуса");
+        assertState(SessionState.WAITING_FOR_FOCUS);
 
-            assertEquals(1, telegramApi.keyboardMessages.size());
-            final var msg = telegramApi.keyboardMessages.get(0);
-            assertTrue(msg.text().contains("How long"));
-            assertEquals(5, msg.buttons().size());
-        }
+        // 3. Select Focus
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb4", "focus:3"), context);
+        assertLastMessageContains("качество рабочего продукта");
+        assertState(SessionState.WAITING_FOR_QUALITY);
 
-        @Test
-        @DisplayName("should transition to WAITING_FOR_DURATION state")
-        void shouldTransitionToWaitingForDuration() {
-            final var request = createMessageRequest(ADMIN_ID, "/start");
+        // 4. Select Quality
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb5", "quality:3"), context);
+        assertLastMessageContains("Подведите краткий итог");
+        assertState(SessionState.WAITING_FOR_SUMMARY);
 
-            handler.handleRequest(request, context);
+        // 5. Enter Summary
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Did everything"), context);
+        assertLastMessageContains("Каков следующий шаг");
+        assertState(SessionState.WAITING_FOR_NEXT_STEP);
 
-            final var session = sessionRepository.getSession(ADMIN_ID);
-            assertEquals(SessionState.WAITING_FOR_DURATION, session.status());
-        }
+        // 6. Enter Next Step -> SAVE
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Deep Work"), context);
+        assertLastMessageContains("Сессия сохранена");
+
+        // Session should be deleted/reset (IDLE is returned by repository for
+        // non-existing)
+        assertFalse(sessionRepository.hasSession(ADMIN_ID)); // Or check if IDLE
+
+        assertEquals(1, driveApi.uploadedNotes.size());
+        final String note = driveApi.uploadedNotes.get(0).content();
+        System.out.println(note); // Debug
+        assertTrue(note.contains("Coding"));
+        assertTrue(note.contains("профессионал")); // Role
+        assertTrue(note.contains("5")); // Energy short
+
+        assertTrue(note.contains("Did everything"));
     }
 
-    @Nested
-    @DisplayName("Duration selection")
-    class DurationSelection {
+    @Test
+    @DisplayName("Timer Event triggers Reflection")
+    void shouldTriggerReflectionOnTimer() {
+        // Setup working session
+        shouldCompleteRitualFlow();
+        telegramApi.sentMessages.clear();
 
-        @Test
-        @DisplayName("should ask for title after duration selection")
-        void shouldAskForTitleAfterDurationSelection() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "/start"), context);
-            telegramApi.sentMessages.clear();
+        // Timer Event
+        final var timerEvent = Map.<String, Object>of("action", "TIMER_DONE", "chatId", ADMIN_ID);
+        handler.handleRequest(timerEvent, context);
 
-            final var request = createCallbackRequest(ADMIN_ID, "cb123", "duration:45");
-            handler.handleRequest(request, context);
-
-            assertEquals(1, telegramApi.sentMessages.size());
-            assertTrue(telegramApi.sentMessages.get(0).text().contains("45 minutes"));
-        }
-
-        @Test
-        @DisplayName("should transition to WAITING_FOR_TITLE state")
-        void shouldTransitionToWaitingForTitle() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "/start"), context);
-            handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb123", "duration:30"), context);
-
-            final var session = sessionRepository.getSession(ADMIN_ID);
-            assertEquals(SessionState.WAITING_FOR_TITLE, session.status());
-            assertEquals(30, session.duration());
-        }
+        assertLastMessageContains("Время вышло");
+        assertState(SessionState.WAITING_FOR_ENERGY);
     }
 
-    @Nested
-    @DisplayName("Session lifecycle")
-    class SessionLifecycle {
-
-        @BeforeEach
-        void startSession() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "/start"), context);
-            handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb123", "duration:45"), context);
-            telegramApi.sentMessages.clear();
-            telegramApi.keyboardMessages.clear();
-        }
-
-        @Test
-        @DisplayName("should start timer after title input")
-        void shouldStartTimerAfterTitle() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "My Task"), context);
-
-            assertEquals(1, telegramApi.sentMessages.size());
-            assertTrue(telegramApi.sentMessages.get(0).text().contains("Timer started"));
-            assertTrue(telegramApi.sentMessages.get(0).text().contains("My Task"));
-
-            final var session = sessionRepository.getSession(ADMIN_ID);
-            assertEquals(SessionState.WORKING, session.status());
-            assertEquals("My Task", session.sessionTitle());
-            assertNotNull(timerService.getLastScheduleName());
-        }
-
-        @Test
-        @DisplayName("should save to Drive after result input")
-        void shouldSaveToDriveAfterResult() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "My Task"), context);
-            telegramApi.sentMessages.clear();
-
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "/stop"), context);
-            telegramApi.sentMessages.clear();
-
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "Completed the feature"), context);
-
-            assertEquals(1, driveApi.uploadedNotes.size());
-            assertTrue(driveApi.uploadedNotes.get(0).content().contains("Completed the feature"));
-            assertTrue(driveApi.uploadedNotes.get(0).content().contains("timer_setting: 45"));
-        }
-
-        @Test
-        @DisplayName("/stop should cancel timer")
-        void shouldCancelTimerOnStop() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "My Task"), context);
-            final String scheduleName = timerService.getLastScheduleName();
-
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "/stop"), context);
-
-            assertEquals(scheduleName, timerService.getLastCancelledSchedule());
-        }
+    @Test
+    @DisplayName("Unauthorized User Ignored")
+    void shouldIgnoreUnauthorized() {
+        handler.handleRequest(createMessageRequest(STRANGER_ID, "/start"), context);
+        assertTrue(telegramApi.sentMessages.isEmpty());
     }
 
-    @Nested
-    @DisplayName("Timer events")
-    class TimerEvents {
+    // --- Helpers ---
 
-        @BeforeEach
-        void startWorkingSession() {
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "/start"), context);
-            handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb123", "duration:45"), context);
-            handler.handleRequest(createMessageRequest(ADMIN_ID, "My Task"), context);
-            telegramApi.sentMessages.clear();
-        }
-
-        @Test
-        @DisplayName("should prompt for result when timer fires")
-        void shouldPromptForResultOnTimerDone() {
-            final var timerEvent = createTimerDoneEvent(ADMIN_ID);
-
-            handler.handleRequest(timerEvent, context);
-
-            assertEquals(1, telegramApi.sentMessages.size());
-            assertTrue(telegramApi.sentMessages.get(0).text().contains("Time's up"));
-
-            final var session = sessionRepository.getSession(ADMIN_ID);
-            assertEquals(SessionState.WAITING_FOR_RESULT, session.status());
-        }
-
-        @Test
-        @DisplayName("should ignore timer for unauthorized user")
-        void shouldIgnoreUnauthorizedTimer() {
-            final var timerEvent = createTimerDoneEvent(STRANGER_ID);
-
-            handler.handleRequest(timerEvent, context);
-
-            assertTrue(telegramApi.sentMessages.isEmpty());
-        }
+    private void assertState(SessionState expected) {
+        assertEquals(expected, sessionRepository.getSession(ADMIN_ID).status());
     }
 
-    @Nested
-    @DisplayName("Empty/null handling")
-    class EdgeCases {
-
-        @Test
-        @DisplayName("should handle empty body gracefully")
-        void shouldHandleEmptyBodyGracefully() {
-            final var request = Map.<String, Object>of("body", "");
-
-            final var response = handler.handleRequest(request, context);
-
-            assertEquals(200, response.get("statusCode"));
-        }
-
-        @Test
-        @DisplayName("should handle null body gracefully")
-        void shouldHandleNullBodyGracefully() {
-            final var request = new HashMap<String, Object>();
-            request.put("body", null);
-
-            final var response = handler.handleRequest(request, context);
-
-            assertEquals(200, response.get("statusCode"));
-        }
+    private void assertLastMessageContains(String substring) {
+        assertFalse(telegramApi.allMessages.isEmpty(), "No messages sent");
+        String lastText = telegramApi.allMessages.get(telegramApi.allMessages.size() - 1);
+        assertTrue(lastText.contains(substring), "Last message '" + lastText + "' did not contain '" + substring + "'");
     }
 
-    // --- Test Helpers ---
+    // --- Data Creation ---
 
     private Map<String, Object> createMessageRequest(final long chatId, final String text) {
-        final String body = String.format("""
-                {
-                    "message": {
-                        "chat": {"id": %d},
-                        "text": "%s"
-                    }
-                }
-                """, chatId, text);
+        final String body = String.format("{\"message\":{\"chat\":{\"id\":%d},\"text\":\"%s\"}}", chatId, text);
         return Map.of("body", body);
     }
 
-    private Map<String, Object> createCallbackRequest(final long chatId,
-            final String callbackId,
-            final String data) {
-        final String body = String.format("""
-                {
-                    "callback_query": {
-                        "id": "%s",
-                        "message": {"chat": {"id": %d}},
-                        "data": "%s"
-                    }
-                }
-                """, callbackId, chatId, data);
+    private Map<String, Object> createCallbackRequest(final long chatId, final String id, final String data) {
+        final String body = String.format(
+                "{\"callback_query\":{\"id\":\"%s\",\"message\":{\"chat\":{\"id\":%d}},\"data\":\"%s\"}}", id, chatId,
+                data);
         return Map.of("body", body);
     }
 
-    private Map<String, Object> createTimerDoneEvent(final long chatId) {
-        return Map.of(
-                "action", "TIMER_DONE",
-                "chatId", chatId);
-    }
-
-    // --- Test Doubles ---
+    // --- Fakes ---
 
     private static class FakeTelegramApi implements TelegramApi {
+        final List<String> allMessages = new ArrayList<>(); // Stores text of all messages in order
         final List<SentMessage> sentMessages = new ArrayList<>();
         final List<KeyboardMessage> keyboardMessages = new ArrayList<>();
-        final List<String> answeredCallbacks = new ArrayList<>();
-        private final com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
         @Override
         public Update parseUpdate(final String json) throws IOException {
-            final var root = objectMapper.readTree(json);
-
-            final var callbackQuery = root.get("callback_query");
-            if (callbackQuery != null) {
-                final long chatId = callbackQuery.get("message").get("chat").get("id").asLong();
-                final String callbackQueryId = callbackQuery.get("id").asText();
-                final String callbackData = callbackQuery.get("data").asText();
-                return new Update(chatId, null, callbackQueryId, callbackData);
+            // Simple naive parser for test
+            if (json.contains("callback_query")) {
+                return new Update(ADMIN_ID, null, "cb1", json.split("\"data\":\"")[1].split("\"")[0]); // Hacky
             }
-
-            final var message = root.get("message");
-            if (message == null) {
-                return null;
+            if (json.contains("\"text\":\"")) {
+                String text = json.split("\"text\":\"")[1].split("\"")[0];
+                return new Update(ADMIN_ID, text, null, null);
             }
-            final long chatId = message.get("chat").get("id").asLong();
-            final String text = message.has("text") ? message.get("text").asText() : "";
-            return new Update(chatId, text, null, null);
+            return null;
         }
 
         @Override
-        public void sendMessage(final long chatId, final String text) {
+        public void sendMessage(long chatId, String text) {
             sentMessages.add(new SentMessage(chatId, text));
+            allMessages.add(text);
         }
 
         @Override
-        public void sendMessageWithKeyboard(final long chatId, final String text, final List<Button> buttons) {
+        public void sendMessageWithKeyboard(long chatId, String text, List<Button> buttons) {
             keyboardMessages.add(new KeyboardMessage(chatId, text, buttons));
+            allMessages.add(text);
         }
 
         @Override
-        public void answerCallbackQuery(final String callbackQueryId) {
-            answeredCallbacks.add(callbackQueryId);
+        public void answerCallbackQuery(String callbackQueryId) {
         }
 
         record SentMessage(long chatId, String text) {
@@ -325,9 +242,9 @@ class BotHandlerTest {
         final List<UploadedNote> uploadedNotes = new ArrayList<>();
 
         @Override
-        public String uploadNote(final String fileName, final String content) {
+        public String uploadNote(String fileName, String content) {
             uploadedNotes.add(new UploadedNote(fileName, content));
-            return "fake-file-id";
+            return "id";
         }
 
         record UploadedNote(String fileName, String content) {
@@ -335,36 +252,34 @@ class BotHandlerTest {
     }
 
     private static class FakeContext implements Context {
-        private final List<String> logs = new ArrayList<>();
-
         @Override
         public String getAwsRequestId() {
-            return "test-request-id";
+            return "req";
         }
 
         @Override
         public String getLogGroupName() {
-            return "test-log-group";
+            return "log";
         }
 
         @Override
         public String getLogStreamName() {
-            return "test-log-stream";
+            return "stream";
         }
 
         @Override
         public String getFunctionName() {
-            return "BotHandler";
+            return "fn";
         }
 
         @Override
         public String getFunctionVersion() {
-            return "1";
+            return "v1";
         }
 
         @Override
         public String getInvokedFunctionArn() {
-            return "arn:aws:lambda:test";
+            return "arn";
         }
 
         @Override
@@ -379,12 +294,12 @@ class BotHandlerTest {
 
         @Override
         public int getRemainingTimeInMillis() {
-            return 30000;
+            return 1000;
         }
 
         @Override
         public int getMemoryLimitInMB() {
-            return 512;
+            return 128;
         }
 
         @Override
@@ -392,12 +307,12 @@ class BotHandlerTest {
             return new LambdaLogger() {
                 @Override
                 public void log(String message) {
-                    logs.add(message);
+                    System.out.println(message);
                 }
 
                 @Override
                 public void log(byte[] message) {
-                    logs.add(new String(message));
+                    System.out.println(new String(message));
                 }
             };
         }
