@@ -44,20 +44,15 @@ The bot MUST provide an interactive way to configure the session duration and co
 - **And** bot state transitions to `WORKING`
 
 ### Requirement: Session Lifecycle
-The bot MUST manage the session timer and handle completion or interruption by initiating the reflection phase.
+The bot MUST manage the session timer and handle completion by offering an extension choice, or interruption by initiating the reflection phase.
 
 #### Scenario: Timer expires
 - **Given** bot is in `WORKING` state
 - **When** scheduled timer event triggers
-- **Then** bot sends "Время вышло. Каков был уровень энергии?" with buttons (5-Пиковый, 4-Потоковый, 3-Функциональный, 2-Упадок, 1-Истощение, 0-Критический)
-- **And** bot state transitions to `WAITING_FOR_ENERGY`
-
-#### Scenario: User stops session manually
-- **Given** bot is in `WORKING` state
-- **When** user sends `/stop`
-- **Then** bot cancels scheduled timer
-- **And** bot sends "Сессия остановлена. Каков был уровень энергии?" with buttons (5-0 as above)
-- **And** bot state transitions to `WAITING_FOR_ENERGY`
+- **Then** bot sends "Время вышло. Что делаем дальше?" with buttons:
+  - "Завершить"
+  - "+5 мин", "+10 мин", "+15 мин", "+20 мин", "+30 мин"
+- **And** bot state transitions to `WAITING_FOR_EXTENSION`
 
 ### Requirement: Result Archiving
 The bot MUST save the session outcome, including all ritual and reflection data, to a Markdown file.
@@ -90,4 +85,21 @@ The bot MUST conduct a post-work reflection (Twist) after the session ends.
 - **When** user enters Summary
 - **Then** bot asks "Каков следующий шаг?"
 - **And** bot transitions to `WAITING_FOR_NEXT_STEP`
+
+### Requirement: Session Extension
+The bot MUST allow the user to extend the ongoing session with various duration options, resetting the timer but maintaining the session's continuity.
+
+#### Scenario: User extends session
+- **Given** bot is in `WAITING_FOR_EXTENSION` state
+- **When** user clicks an extension button (e.g., "+10 мин")
+- **Then** bot creates a new timer for the selected duration
+- **And** bot replies "Таймер продлен на 10 минут. Работаем."
+- **And** bot state transitions back to `WORKING`
+- **And** the session's **original start time** and **initial duration** remain unchanged to preserve session integrity.
+
+#### Scenario: User finishes session
+- **Given** bot is in `WAITING_FOR_EXTENSION` state
+- **When** user clicks "Завершить"
+- **Then** bot sends "Каков был уровень энергии?" with buttons (5-Пиковый, 4-Потоковый, 3-Функциональный, 2-Упадок, 1-Истощение, 0-Критический)
+- **And** bot state transitions to `WAITING_FOR_ENERGY` (proceeding to reflection phase)
 
