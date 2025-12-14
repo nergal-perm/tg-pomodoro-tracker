@@ -1,14 +1,14 @@
 # Implementation Tasks
 
-- [ ] Update `SessionState` enum to include `WAITING_FOR_EXTENSION`.
-- [ ] Update `BotHandler` `handleTimerDone` to transition to `WAITING_FOR_EXTENSION` and show options.
-- [ ] Add `EXTENSION_BUTTONS` constant to `BotHandler`.
-- [ ] Implement callback handling for `extend:<minutes>`:
-    - [ ] Create new timer.
-    - [ ] Update session with new schedule name and state `WORKING`.
-    - [ ] Send confirmation message.
-- [ ] Implement callback handling for `finish` (or reuse existing logic moved to a handler):
-    - [ ] Transition to `WAITING_FOR_ENERGY`.
-    - [ ] Trigger reflection flow.
-- [ ] Verify `SessionData` updates preserve `startTime` and `duration` (initial) correctly.
-- [ ] Update tests to cover the new state transition and extension flow.
+- [x] Update `SessionState` enum to include `WAITING_FOR_EXTENSION`.
+- [x] Update `BotHandler` `handleTimerDone` to transition to `WAITING_FOR_EXTENSION` and show options.
+- [x] Add `EXTENSION_BUTTONS` constant to `BotHandler`.
+- [x] Implement callback handling for `extend:<minutes>`:
+    - [x] Create new timer.
+    - [x] Update session with new schedule name and state `WORKING`.
+    - [x] Send confirmation message.
+- [x] Implement callback handling for `finish` (or reuse existing logic moved to a handler):
+    - [x] Transition to `WAITING_FOR_ENERGY`.
+    - [x] Trigger reflection flow.
+- [x] Verify `SessionData` updates preserve `startTime` and `duration` (initial) correctly.
+- [x] Update tests to cover the new state transition and extension flow.

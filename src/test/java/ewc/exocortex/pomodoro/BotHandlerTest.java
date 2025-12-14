@@ -4,12 +4,12 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
+
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+
 import java.util.List;
 import java.util.Map;
 
@@ -148,8 +148,8 @@ class BotHandlerTest {
     }
 
     @Test
-    @DisplayName("Timer Event triggers Reflection")
-    void shouldTriggerReflectionOnTimer() {
+    @DisplayName("Timer Event triggers Extension Choice")
+    void shouldTriggerExtensionChoiceOnTimer() {
         // Setup working session
         shouldCompleteRitualFlow();
         telegramApi.sentMessages.clear();
@@ -159,7 +159,50 @@ class BotHandlerTest {
         handler.handleRequest(timerEvent, context);
 
         assertLastMessageContains("Время вышло");
+        assertLastMessageContains("Что делаем дальше");
+        assertState(SessionState.WAITING_FOR_EXTENSION);
+    }
+
+    @Test
+    @DisplayName("User finishes session after timer")
+    void shouldFinishSessionAfterExtensionChoice() {
+        // Setup working session and trigger timer
+        shouldCompleteRitualFlow();
+        final var timerEvent = Map.<String, Object>of("action", "TIMER_DONE", "chatId", ADMIN_ID);
+        handler.handleRequest(timerEvent, context);
+        assertState(SessionState.WAITING_FOR_EXTENSION);
+        telegramApi.sentMessages.clear();
+
+        // Click Finish
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb6", "extension:finish"), context);
+        assertLastMessageContains("уровень энергии");
         assertState(SessionState.WAITING_FOR_ENERGY);
+    }
+
+    @Test
+    @DisplayName("User extends session")
+    void shouldExtendSession() {
+        // Setup working session and trigger timer
+        shouldCompleteRitualFlow();
+        final var session = sessionRepository.getSession(ADMIN_ID);
+        final var originalStartTime = session.startTime();
+        final var originalDuration = session.duration();
+
+        final var timerEvent = Map.<String, Object>of("action", "TIMER_DONE", "chatId", ADMIN_ID);
+        handler.handleRequest(timerEvent, context);
+        assertState(SessionState.WAITING_FOR_EXTENSION);
+        telegramApi.sentMessages.clear();
+
+        // Click +10 min
+        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb7", "extension:10"), context);
+        assertLastMessageContains("Таймер продлен на 10 минут");
+        assertState(SessionState.WORKING);
+
+        // Verify session state preserved
+        final var extendedSession = sessionRepository.getSession(ADMIN_ID);
+        assertEquals(originalStartTime, extendedSession.startTime(), "Start time should be preserved");
+        assertEquals(originalDuration, extendedSession.duration(), "Initial duration should be preserved");
+        assertNotNull(extendedSession.scheduleName(), "New schedule should be created");
     }
 
     @Test

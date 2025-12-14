@@ -88,6 +88,18 @@ public record SessionData(
                 null, null, null, null, null);
     }
 
+    public SessionData waitingForExtension() {
+        return new SessionData(chatId, SessionState.WAITING_FOR_EXTENSION, duration, scheduleName,
+                task, role, productType, usageContext, workContext, resources, constraints, startTime,
+                null, null, null, null, null);
+    }
+
+    public SessionData workingExtended(final String newScheduleName) {
+        return new SessionData(chatId, SessionState.WORKING, duration, newScheduleName,
+                task, role, productType, usageContext, workContext, resources, constraints, startTime,
+                null, null, null, null, null);
+    }
+
     public SessionData waitingForFocus(final String energyLevel) {
         return copyWithStatusAndReflection(SessionState.WAITING_FOR_FOCUS, energyLevel, null, null, null, null);
     }

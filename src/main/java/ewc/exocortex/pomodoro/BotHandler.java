@@ -50,6 +50,14 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             new TelegramApi.Button("2-Приемлемое", "quality:2"),
             new TelegramApi.Button("1-Низкое", "quality:1"));
 
+    private static final List<TelegramApi.Button> EXTENSION_BUTTONS = List.of(
+            new TelegramApi.Button("Завершить", "extension:finish"),
+            new TelegramApi.Button("+5 мин", "extension:5"),
+            new TelegramApi.Button("+10 мин", "extension:10"),
+            new TelegramApi.Button("+15 мин", "extension:15"),
+            new TelegramApi.Button("+20 мин", "extension:20"),
+            new TelegramApi.Button("+30 мин", "extension:30"));
+
     private final SecurityService securityService;
     private final TelegramApi telegramApi;
     private final DriveApi driveApi;
@@ -145,9 +153,9 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             return;
         }
 
-        // Transition to WAITING_FOR_ENERGY containing ritual data
-        sessionRepository.saveSession(session.waitingForEnergy());
-        telegramApi.sendMessageWithKeyboard(chatId, "Время вышло. Каков был уровень энергии?", ENERGY_BUTTONS);
+        // Transition to WAITING_FOR_EXTENSION to offer extension or finish
+        sessionRepository.saveSession(session.waitingForExtension());
+        telegramApi.sendMessageWithKeyboard(chatId, "Время вышло. Что делаем дальше?", EXTENSION_BUTTONS);
     }
 
     private void routeUpdate(final TelegramApi.Update update, final SessionData session, final Context context)
@@ -243,6 +251,23 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             final String quality = callbackData.substring("quality:".length());
             sessionRepository.saveSession(session.waitingForSummary(quality));
             telegramApi.sendMessage(chatId, "Подведите краткий итог сессии.");
+            return;
+        }
+
+        if (callbackData.startsWith("extension:") && session.status() == SessionState.WAITING_FOR_EXTENSION) {
+            final String action = callbackData.substring("extension:".length());
+            if ("finish".equals(action)) {
+                // Transition to reflection phase
+                sessionRepository.saveSession(session.waitingForEnergy());
+                telegramApi.sendMessageWithKeyboard(chatId, "Каков был уровень энергии?", ENERGY_BUTTONS);
+            } else {
+                // Extend the session
+                final int extensionMinutes = Integer.parseInt(action);
+                final String newScheduleName = timerService.createTimer(chatId, extensionMinutes);
+                sessionRepository.saveSession(session.workingExtended(newScheduleName));
+                telegramApi.sendMessage(chatId,
+                        String.format("Таймер продлен на %d минут. Работаем.", extensionMinutes));
+            }
             return;
         }
     }

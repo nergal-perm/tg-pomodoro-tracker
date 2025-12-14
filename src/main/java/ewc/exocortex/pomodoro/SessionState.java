@@ -21,6 +21,9 @@ public enum SessionState {
 
     WORKING,
 
+    // Extension Choice
+    WAITING_FOR_EXTENSION,
+
     // Post-work Reflection
     WAITING_FOR_ENERGY,
     WAITING_FOR_FOCUS,
