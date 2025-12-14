@@ -6,7 +6,7 @@
 
   <groupId>ewc.exocortex</groupId>
   <artifactId>pomodoro-bot</artifactId>
-  <version>0.0.2</version>
+  <version>0.0.3</version>
   <packaging>jar</packaging>
 
   <name>Pomodoro Telegram Bot</name>
