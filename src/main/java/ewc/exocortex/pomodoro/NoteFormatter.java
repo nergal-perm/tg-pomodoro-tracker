@@ -32,6 +32,7 @@ public final class NoteFormatter {
     }
 
     public static String format(final SessionData session, final Instant stopTime) {
+        System.out.println("NoteFormatter: Formatting session note for task: " + session.task());
         String note = TEMPLATE;
 
         note = replace(note, "{{date}}", formatDate(session.startTime()));

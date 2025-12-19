@@ -124,6 +124,8 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
             // Get current session state
             final SessionData session = sessionRepository.getSession(update.chatId());
+            context.getLogger().log("Processing update for chatId: " + update.chatId() + ", session status: "
+                    + (session != null ? session.status() : "null"));
 
             // Route based on state and update type
             routeUpdate(update, session, context);
@@ -131,7 +133,8 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             return successResponse();
 
         } catch (Exception e) {
-            context.getLogger().log("Error processing request: " + e.getMessage());
+            context.getLogger()
+                    .log("CRITICAL ERROR processing request: " + e.getClass().getName() + ": " + e.getMessage());
             e.printStackTrace();
             return successResponse();
         }
@@ -150,8 +153,12 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
         // Only process if session is in WORKING state
         if (session.status() != SessionState.WORKING) {
+            context.getLogger()
+                    .log("Timer done event ignored. Session for chatId " + chatId + " is in state " + session.status());
             return;
         }
+
+        context.getLogger().log("Timer done for chatId: " + chatId + ". Transitioning to WAITING_FOR_EXTENSION.");
 
         // Transition to WAITING_FOR_EXTENSION to offer extension or finish
         sessionRepository.saveSession(session.waitingForExtension());
@@ -175,6 +182,8 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
         // Handle callback queries
         if (update.isCallbackQuery()) {
+            context.getLogger()
+                    .log("Handling callback query: " + update.callbackData() + " for chatId: " + update.chatId());
             telegramApi.answerCallbackQuery(update.callbackQueryId());
             handleCallbackQuery(update.chatId(), update.callbackData(), session, context);
             return;
@@ -182,6 +191,8 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
         // Handle text messages based on state
         if (update.isTextMessage() && !update.isCommand()) {
+            context.getLogger().log("Handling text message: '" + update.text() + "' for chatId: " + update.chatId()
+                    + " in state: " + session.status());
             handleTextMessage(update.chatId(), update.text(), session, context);
         }
     }
@@ -256,6 +267,7 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
 
         if (callbackData.startsWith("extension:") && session.status() == SessionState.WAITING_FOR_EXTENSION) {
             final String action = callbackData.substring("extension:".length());
+            context.getLogger().log("Extension choice: " + action + " for chatId: " + chatId);
             if ("finish".equals(action)) {
                 // Transition to reflection phase
                 sessionRepository.saveSession(session.waitingForEnergy());
@@ -270,6 +282,7 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
             }
             return;
         }
+        context.getLogger().log("Unhandled callback query: " + callbackData + " in state: " + session.status());
     }
 
     private void handleTextMessage(final long chatId, final String text,
@@ -305,17 +318,24 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
                 sessionRepository.saveSession(session.waitingForNextStep(text));
                 telegramApi.sendMessage(chatId, "Каков следующий шаг?");
             }
-            case WAITING_FOR_NEXT_STEP -> finishSession(chatId, text, session);
+            case WAITING_FOR_NEXT_STEP -> finishSession(chatId, text, session, context);
 
             case IDLE -> {
                 // In IDLE, just save the message to Drive as a simple note (legacy behavior /
                 // bot-core spec)
+                context.getLogger().log("Saving quick note from IDLE state for chatId: " + chatId);
                 final String fileName = formatFileName(Instant.now(), "Quick Note");
-                driveApi.uploadNote(fileName, text);
-                telegramApi.sendMessage(chatId, "Информация о рабочей сессии сохранена на Диск!");
+                try {
+                    driveApi.uploadNote(fileName, text);
+                    telegramApi.sendMessage(chatId, "Информация о рабочей сессии сохранена на Диск!");
+                } catch (Exception e) {
+                    context.getLogger().log("FAILED to save quick note to Drive: " + e.getMessage());
+                    e.printStackTrace();
+                    telegramApi.sendMessage(chatId, "Ошибка при сохранении на Диск. Попробуйте позже.");
+                }
             }
             default -> {
-                // Ignore
+                context.getLogger().log("Unhandled text message in state: " + session.status());
             }
         }
     }
@@ -335,7 +355,8 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
         telegramApi.sendMessage(chatId, String.format("Таймер запущен на %d минут. Работаем.", session.duration()));
     }
 
-    private void finishSession(final long chatId, final String nextStep, final SessionData session)
+    private void finishSession(final long chatId, final String nextStep, final SessionData session,
+            final Context context)
             throws IOException, InterruptedException {
 
         SessionData completedSession = new SessionData(
@@ -362,15 +383,30 @@ public class BotHandler implements RequestHandler<Map<String, Object>, Map<Strin
         final String noteContent = NoteFormatter.format(completedSession, stopTime);
         final String fileName = formatFileName(completedSession.startTime(), completedSession.task());
 
-        driveApi.uploadNote(fileName, noteContent);
+        context.getLogger()
+                .log("Attempting to save session note. FileName: " + fileName + ", Task: " + completedSession.task());
 
-        sessionRepository.deleteSession(chatId);
-        telegramApi.sendMessage(chatId, "Сессия сохранена. Отдыхаем.");
+        try {
+            driveApi.uploadNote(fileName, noteContent);
+            context.getLogger().log("Session note saved successfully for chatId: " + chatId);
+
+            sessionRepository.deleteSession(chatId);
+            telegramApi.sendMessage(chatId, "Сессия сохранена. Отдыхаем.");
+        } catch (Exception e) {
+            context.getLogger()
+                    .log("FAILED to save session note to Drive: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace();
+            telegramApi.sendMessage(chatId, "Ошибка при сохранении сессии на Google Drive. Проверьте логи.");
+            // We DON'T delete the session if it fails to save, so user might be able to
+            // retry?
+            // Actually, they might need to re-enter final step.
+        }
     }
 
     private String formatFileName(final Instant startTime, final String title) {
-        final String safeTitle = title.replaceAll("[^a-zA-Z0-9а-яА-Я ]", "").trim();
-        final String shortTitle = safeTitle.length() > 30 ? safeTitle.substring(0, 30) : safeTitle;
+        final String actualTitle = (title == null || title.isBlank()) ? "Untitled Session" : title;
+        final String safeTitle = actualTitle.replaceAll("[^a-zA-Z0-9а-яА-Я ]", "").trim();
+        final String shortTitle = safeTitle.length() > 50 ? safeTitle.substring(0, 50) : safeTitle;
 
         final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd' 'HH-mm")
                 .withZone(java.time.ZoneId.of("Asia/Tbilisi"));
