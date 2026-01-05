@@ -46,6 +46,15 @@ The bot MUST provide an interactive way to configure the session duration and co
 ### Requirement: Session Lifecycle
 The bot MUST manage the session timer and handle completion by offering an extension choice, or interruption by initiating the reflection phase.
 
+#### Pre-work Ritual:
+The system MUST guide the user through a strictly defined initialization sequence before work begins. This sequence MUST consist of:
+    1.  **Duration**: Selection of time block (in minutes).
+    2.  **Task**: Definition of the specific activity (What are you doing?).
+    3.  **Role**: Selection of the cognitive role (Student, Intellectual, Professional, Explorer, Enlightener).
+    4.  **Product**: Definition of the expected output/artifact.
+    -   *Note: Previous steps regarding Context, Resources, and Constraints have been removed to reduce friction.*
+    -   Completion of these steps transitions the session to `WORKING` state.
+
 #### Scenario: Timer expires
 - **Given** bot is in `WORKING` state
 - **When** scheduled timer event triggers
@@ -54,37 +63,32 @@ The bot MUST manage the session timer and handle completion by offering an exten
   - "+5 мин", "+10 мин", "+15 мин", "+20 мин", "+30 мин"
 - **And** bot state transitions to `WAITING_FOR_EXTENSION`
 
+#### Scenario: User finishes session
+- **Given** bot is in `WAITING_FOR_EXTENSION` state
+- **When** user clicks "Завершить"
+- **Then** bot initiates the **Post-work Reflection** (asks for Outcome).
+
 ### Requirement: Result Archiving
-The bot MUST save the session outcome, including all ritual and reflection data, to a Markdown file.
+The bot MUST save the session outcome to the ingestion buffer.
 
 #### Scenario: User completes reflection
-- **Given** bot is in `WAITING_FOR_NEXT_STEP` state
-- **When** user answers the final question (Next Step)
-- **Then** bot generates a detailed Markdown note using a predefined template (`src/main/resources/templates/session-note.md`) populated with:
-  - Session Meta (Duration, Timestamps)
-  - Pre-work Ritual Answers (Task, Role, Product, etc.)
-  - Post-work Reflection Answers (Energy, Focus, Quality, Summary, Next Step)
-- **And** bot uploads note to Google Drive
+- **Given** bot is in `WAITING_FOR_OUTCOME` state
+- **When** user enters the outcome
+- **Then** bot collects all session data (Meta, Ritual, Outcome)
+- **And** bot persists the data via the Ingestion mechanism
 - **And** bot replies "Сессия сохранена. Отдыхаем."
 - **And** bot state transitions to `IDLE`
 
 ### Requirement: Post-work Reflection
-The bot MUST conduct a post-work reflection (Twist) after the session ends.
+The bot MUST conduct a streamlined post-work reflection after the session ends, focusing only on the outcome.
 
 #### Scenario: Reflection Flow
-- **Given** bot is in `WAITING_FOR_ENERGY`
-- **When** user selects Energy level
-- **Then** bot asks "Каков был уровень фокуса?" with buttons (3-Предельный, 2-Обычный, 1-Рассеянный)
-- **And** bot transitions to `WAITING_FOR_FOCUS`
-- **When** user selects Focus level
-- **Then** bot asks "Каково качество рабочего продукта?" with buttons (3-Исключительное, 2-Приемлемое, 1-Низкое)
-- **And** bot transitions to `WAITING_FOR_QUALITY`
-- **When** user selects Quality level
-- **Then** bot asks "Подведите краткий итог сессии."
-- **And** bot transitions to `WAITING_FOR_SUMMARY`
-- **When** user enters Summary
-- **Then** bot asks "Каков следующий шаг?"
-- **And** bot transitions to `WAITING_FOR_NEXT_STEP`
+- **Given** bot is in `WAITING_FOR_EXTENSION` (completed)
+- **When** user chooses to finish the session
+- **Then** bot asks "Каков результат? (Что сделано + рефлексия)"
+- **And** bot transitions to `WAITING_FOR_OUTCOME`
+- **When** user enters the Outcome text
+- **Then** bot triggers the **Result Archiving** process.
 
 ### Requirement: Session Extension
 The bot MUST allow the user to extend the ongoing session with various duration options, resetting the timer but maintaining the session's continuity.

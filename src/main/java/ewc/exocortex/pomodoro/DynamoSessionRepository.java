@@ -48,16 +48,8 @@ public final class DynamoSessionRepository implements SessionRepository {
                 getStringOrNull(item, "task"),
                 getStringOrNull(item, "role"),
                 getStringOrNull(item, "productType"),
-                getStringOrNull(item, "usageContext"),
-                getStringOrNull(item, "workContext"),
-                getStringOrNull(item, "resources"),
-                getStringOrNull(item, "constraints"),
                 getInstantOrNull(item, "startTime"),
-                getStringOrNull(item, "energyLevel"),
-                getStringOrNull(item, "focusLevel"),
-                getStringOrNull(item, "qualityLevel"),
-                getStringOrNull(item, "summary"),
-                getStringOrNull(item, "nextStep"));
+                getStringOrNull(item, "outcome"));
     }
 
     @Override
@@ -72,18 +64,10 @@ public final class DynamoSessionRepository implements SessionRepository {
         putIfNotNull(item, "task", session.task(), false);
         putIfNotNull(item, "role", session.role(), false);
         putIfNotNull(item, "productType", session.productType(), false);
-        putIfNotNull(item, "usageContext", session.usageContext(), false);
-        putIfNotNull(item, "workContext", session.workContext(), false);
-        putIfNotNull(item, "resources", session.resources(), false);
-        putIfNotNull(item, "constraints", session.constraints(), false);
 
         putIfNotNull(item, "startTime", session.startTime() != null ? session.startTime().toString() : null, false);
 
-        putIfNotNull(item, "energyLevel", session.energyLevel(), false);
-        putIfNotNull(item, "focusLevel", session.focusLevel(), false);
-        putIfNotNull(item, "qualityLevel", session.qualityLevel(), false);
-        putIfNotNull(item, "summary", session.summary(), false);
-        putIfNotNull(item, "nextStep", session.nextStep(), false);
+        putIfNotNull(item, "outcome", session.outcome(), false);
 
         dynamoDb.putItem(PutItemRequest.builder()
                 .tableName(TABLE_NAME)

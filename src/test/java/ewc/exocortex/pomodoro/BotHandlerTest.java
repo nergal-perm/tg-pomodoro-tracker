@@ -25,7 +25,7 @@ class BotHandlerTest {
 
     private SecurityService securityService;
     private FakeTelegramApi telegramApi;
-    private FakeDriveApi driveApi;
+    private FakeIngestionService ingestionService;
     private InMemorySessionRepository sessionRepository;
     private NoOpTimerService timerService;
     private FakeContext context;
@@ -35,11 +35,11 @@ class BotHandlerTest {
     void setUp() {
         securityService = new SecurityService(ADMIN_ID);
         telegramApi = new FakeTelegramApi();
-        driveApi = new FakeDriveApi();
+        ingestionService = new FakeIngestionService();
         sessionRepository = new InMemorySessionRepository();
         timerService = new NoOpTimerService();
         context = new FakeContext();
-        handler = new BotHandler(securityService, telegramApi, driveApi, sessionRepository, timerService);
+        handler = new BotHandler(securityService, telegramApi, ingestionService, sessionRepository, timerService);
     }
 
     @Test
@@ -65,28 +65,8 @@ class BotHandlerTest {
         assertLastMessageContains("Какой рабочий продукт");
         assertState(SessionState.WAITING_FOR_PRODUCT_TYPE);
 
-        // 5. Enter Product Type
+        // 5. Enter Product Type -> START TIMER (Simplified Flow)
         handler.handleRequest(createMessageRequest(ADMIN_ID, "Code"), context);
-        assertLastMessageContains("Где и при каких условиях");
-        assertState(SessionState.WAITING_FOR_USAGE_CONTEXT);
-
-        // 6. Enter Usage Context
-        handler.handleRequest(createMessageRequest(ADMIN_ID, "Production"), context);
-        assertLastMessageContains("Каков контекст");
-        assertState(SessionState.WAITING_FOR_CONTEXT);
-
-        // 7. Enter Work Context
-        handler.handleRequest(createMessageRequest(ADMIN_ID, "Urgent fix"), context);
-        assertLastMessageContains("Каковы ресурсы");
-        assertState(SessionState.WAITING_FOR_RESOURCES);
-
-        // 8. Enter Resources
-        handler.handleRequest(createMessageRequest(ADMIN_ID, "Coffee"), context);
-        assertLastMessageContains("Ограничения");
-        assertState(SessionState.WAITING_FOR_CONSTRAINTS);
-
-        // 9. Enter Constraints -> START TIMER
-        handler.handleRequest(createMessageRequest(ADMIN_ID, "None"), context);
         assertLastMessageContains("Таймер запущен");
         assertState(SessionState.WORKING);
 
@@ -106,45 +86,23 @@ class BotHandlerTest {
 
         // 1. Timer finishes (or Stop)
         handler.handleRequest(createMessageRequest(ADMIN_ID, "/stop"), context);
-        assertLastMessageContains("уровень энергии");
-        assertState(SessionState.WAITING_FOR_ENERGY);
+        assertLastMessageContains("результат");
+        assertState(SessionState.WAITING_FOR_OUTCOME);
 
-        // 2. Select Energy
-        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb3", "energy:5"), context);
-        assertLastMessageContains("уровень фокуса");
-        assertState(SessionState.WAITING_FOR_FOCUS);
-
-        // 3. Select Focus
-        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb4", "focus:3"), context);
-        assertLastMessageContains("качество рабочего продукта");
-        assertState(SessionState.WAITING_FOR_QUALITY);
-
-        // 4. Select Quality
-        handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb5", "quality:3"), context);
-        assertLastMessageContains("Подведите краткий итог");
-        assertState(SessionState.WAITING_FOR_SUMMARY);
-
-        // 5. Enter Summary
-        handler.handleRequest(createMessageRequest(ADMIN_ID, "Did everything"), context);
-        assertLastMessageContains("Каков следующий шаг");
-        assertState(SessionState.WAITING_FOR_NEXT_STEP);
-
-        // 6. Enter Next Step -> SAVE
-        handler.handleRequest(createMessageRequest(ADMIN_ID, "Deep Work"), context);
+        // 2. Enter Outcome -> SAVE
+        handler.handleRequest(createMessageRequest(ADMIN_ID, "Done everything. Next: Sleep"), context);
         assertLastMessageContains("Сессия сохранена");
 
-        // Session should be deleted/reset (IDLE is returned by repository for
-        // non-existing)
-        assertFalse(sessionRepository.hasSession(ADMIN_ID)); // Or check if IDLE
+        // Session should be deleted/reset
+        assertFalse(sessionRepository.hasSession(ADMIN_ID));
 
-        assertEquals(1, driveApi.uploadedNotes.size());
-        final String note = driveApi.uploadedNotes.get(0).content();
-        System.out.println(note); // Debug
-        assertTrue(note.contains("Coding"));
-        assertTrue(note.contains("профессионал")); // Role
-        assertTrue(note.contains("5")); // Energy short
-
-        assertTrue(note.contains("Did everything"));
+        assertEquals(1, ingestionService.ingestedSessions.size());
+        final IngestionPayload payload = ingestionService.ingestedSessions.get(0);
+        assertEquals("Coding", payload.task());
+        assertEquals("Done everything. Next: Sleep", payload.outcome());
+        assertNotNull(payload.startTime());
+        assertNotNull(payload.endTime());
+        assertEquals(45, payload.duration());
     }
 
     @Test
@@ -175,8 +133,8 @@ class BotHandlerTest {
 
         // Click Finish
         handler.handleRequest(createCallbackRequest(ADMIN_ID, "cb6", "extension:finish"), context);
-        assertLastMessageContains("уровень энергии");
-        assertState(SessionState.WAITING_FOR_ENERGY);
+        assertLastMessageContains("результат");
+        assertState(SessionState.WAITING_FOR_OUTCOME);
     }
 
     @Test
@@ -210,6 +168,87 @@ class BotHandlerTest {
     void shouldIgnoreUnauthorized() {
         handler.handleRequest(createMessageRequest(STRANGER_ID, "/start"), context);
         assertTrue(telegramApi.sentMessages.isEmpty());
+    }
+
+    // Mock IngestionService instead of DriveApi
+    private static class FakeIngestionService extends DynamoIngestionService {
+        final List<IngestionPayload> ingestedSessions = new ArrayList<>();
+
+        public FakeIngestionService() {
+            super(null); // No client needed for mock
+        }
+
+        @Override
+        public void ingestSession(final IngestionPayload payload) {
+            ingestedSessions.add(payload);
+        }
+    }
+
+    private static class FakeContext implements Context {
+        @Override
+        public String getAwsRequestId() {
+            return "req";
+        }
+
+        @Override
+        public String getLogGroupName() {
+            return "log";
+        }
+
+        @Override
+        public String getLogStreamName() {
+            return "stream";
+        }
+
+        @Override
+        public String getFunctionName() {
+            return "fn";
+        }
+
+        @Override
+        public String getFunctionVersion() {
+            return "v1";
+        }
+
+        @Override
+        public String getInvokedFunctionArn() {
+            return "arn";
+        }
+
+        @Override
+        public com.amazonaws.services.lambda.runtime.CognitoIdentity getIdentity() {
+            return null;
+        }
+
+        @Override
+        public com.amazonaws.services.lambda.runtime.ClientContext getClientContext() {
+            return null;
+        }
+
+        @Override
+        public int getRemainingTimeInMillis() {
+            return 1000;
+        }
+
+        @Override
+        public int getMemoryLimitInMB() {
+            return 128;
+        }
+
+        @Override
+        public LambdaLogger getLogger() {
+            return new LambdaLogger() {
+                @Override
+                public void log(String message) {
+                    System.out.println(message);
+                }
+
+                @Override
+                public void log(byte[] message) {
+                    System.out.println(new String(message));
+                }
+            };
+        }
     }
 
     // --- Helpers ---
@@ -278,86 +317,6 @@ class BotHandlerTest {
         }
 
         record KeyboardMessage(long chatId, String text, List<Button> buttons) {
-        }
-    }
-
-    private static class FakeDriveApi implements DriveApi {
-        final List<UploadedNote> uploadedNotes = new ArrayList<>();
-
-        @Override
-        public String uploadNote(String fileName, String content) {
-            uploadedNotes.add(new UploadedNote(fileName, content));
-            return "id";
-        }
-
-        record UploadedNote(String fileName, String content) {
-        }
-    }
-
-    private static class FakeContext implements Context {
-        @Override
-        public String getAwsRequestId() {
-            return "req";
-        }
-
-        @Override
-        public String getLogGroupName() {
-            return "log";
-        }
-
-        @Override
-        public String getLogStreamName() {
-            return "stream";
-        }
-
-        @Override
-        public String getFunctionName() {
-            return "fn";
-        }
-
-        @Override
-        public String getFunctionVersion() {
-            return "v1";
-        }
-
-        @Override
-        public String getInvokedFunctionArn() {
-            return "arn";
-        }
-
-        @Override
-        public com.amazonaws.services.lambda.runtime.CognitoIdentity getIdentity() {
-            return null;
-        }
-
-        @Override
-        public com.amazonaws.services.lambda.runtime.ClientContext getClientContext() {
-            return null;
-        }
-
-        @Override
-        public int getRemainingTimeInMillis() {
-            return 1000;
-        }
-
-        @Override
-        public int getMemoryLimitInMB() {
-            return 128;
-        }
-
-        @Override
-        public LambdaLogger getLogger() {
-            return new LambdaLogger() {
-                @Override
-                public void log(String message) {
-                    System.out.println(message);
-                }
-
-                @Override
-                public void log(byte[] message) {
-                    System.out.println(new String(message));
-                }
-            };
         }
     }
 }
